@@ -2,15 +2,12 @@ package controllers
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 
 	"github.com/Sourjaya/go-hrms/pkg/models"
 	"github.com/gofiber/fiber"
-	"github.com/gorilla/mux"
 	"github.com/joho/godotenv"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -25,7 +22,7 @@ const colName = "watchlist"
 var collection *mongo.Collection
 
 func init() {
-	if err := godotenv.Load("../.env"); err != nil {
+	if err := godotenv.Load(".env"); err != nil {
 		log.Fatal("Error loading env variables")
 	}
 	connectionString := os.Getenv("MONGODB_URI")
@@ -44,8 +41,8 @@ func init() {
 	fmt.Println("Collection created")
 }
 
-func insertOneUser(user models.Employee) interface{} {
-	inserted, err := collection.InsertOne(context.Background(), user)
+func insertOneEmployee(employee *models.Employee) interface{} {
+	inserted, err := collection.InsertOne(context.Background(), employee)
 
 	if err != nil {
 		log.Fatal(err)
@@ -54,18 +51,20 @@ func insertOneUser(user models.Employee) interface{} {
 	return inserted.InsertedID
 }
 
-func deleteOneUser(Id string, w http.ResponseWriter) {
-	id, err := primitive.ObjectIDFromHex(Id)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-	}
+func deleteOneEmployee(id primitive.ObjectID, ctx *fiber.Ctx) {
 	filter := bson.M{"_id": id}
-	deleteCount, err := collection.DeleteOne(context.Background(), filter)
+	deleteCount, err := collection.DeleteOne(ctx.Context(), filter)
 
 	if err != nil {
-		log.Fatal(err)
+		ctx.SendStatus(500)
+		return
 	}
-	fmt.Println("User got deleted with delete count: ", deleteCount)
+	if deleteCount.DeletedCount < 1 {
+		ctx.SendStatus(404)
+		return
+	}
+	log.Println("User got deleted with delete count: ", deleteCount.DeletedCount)
+	ctx.Status(200).JSON("record deleted")
 }
 
 func GetAllEmployees(ctx *fiber.Ctx) {
@@ -95,7 +94,6 @@ func GetEmployeeByID(ctx *fiber.Ctx) {
 		return
 	}
 	ctx.JSON(employee)
-	return
 }
 
 func NewEmployee(ctx *fiber.Ctx) {
@@ -105,23 +103,25 @@ func NewEmployee(ctx *fiber.Ctx) {
 
 	ctx.Append("Content-Type", "application/json")
 	ctx.Append("Allow-Control-Allow-Methods", "POST")
-	var employee models.Employee
+	var employee *models.Employee
 
-	if err := ctx.BodyParser(employee); err != nil {
+	if err := ctx.BodyParser(&employee); err != nil {
 		ctx.Status(400).SendString(err.Error())
 		return
 	}
-	ob := insertOneUser(employee)
+	ob := insertOneEmployee(employee)
 	employee.ID = ob.(primitive.ObjectID)
 	ctx.JSON(employee)
-	return
 }
 
-func DeleteUser(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Allow-Control-Allow-Methods", "DELETE")
-
-	params := mux.Vars(r)
-	deleteOneUser(params["id"], w)
-	json.NewEncoder(w).Encode(params["id"])
+func DeleteEmployee(ctx *fiber.Ctx) {
+	ctx.Append("Content-Type", "application/json")
+	ctx.Append("Allow-Control-Allow-Methods", "DELETE")
+	id := ctx.Params("id")
+	oid, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		ctx.SendStatus(400)
+		return
+	}
+	deleteOneEmployee(oid, ctx)
 }

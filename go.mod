@@ -3,7 +3,6 @@ module github.com/Sourjaya/go-hrms
 go 1.21.6
 
 require (
-	github.com/Sourjaya/go-mongo-crud v0.0.0-20240221120733-3bd3148b37da
 	github.com/gofiber/fiber v1.14.6
 	github.com/gorilla/mux v1.8.1
 	github.com/joho/godotenv v1.5.1
